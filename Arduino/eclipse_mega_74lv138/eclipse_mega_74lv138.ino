@@ -135,6 +135,59 @@
 #include <eclipse_time.h>
 #include <SdFat.h>    // FAT File System library
 
+/*
+ * Sensor configuration data.
+ * 
+ * Allowable exposure times in microseconds. The sensitivity configurations reference
+ * these values.
+ */
+const uint16_t EXPOSURE_TIME_MICROSECONDS[] PROGMEM = {125, 250, 500, 1000};
+
+/*
+ * Sensor and exposure time configurations, ordered from least sensentive to most
+ * sensitive. The bit layout follows:
+ * 
+ * Symbol  Meaning
+ * ------  ----------
+ *   X     Unused
+ *   T     Exposure time
+ *   S     Sensitivity Adjustment 
+ *   F     Scale Factor
+ *   
+ * Bit:  7654 3210
+ * ----  ---- ----
+ *       XXTT FFCC  
+ */
+
+const uint8_t SENSOR_CONFIGURATIONS[] PROGMEM = {
+  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_125,
+  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_250,
+  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_500,
+  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_1000,
+  
+  SCALE_TEN | SENSITIVITY_HUNDRED | EXPOSURE_125,
+  SCALE_TEN | SENSITIVITY_HUNDRED | EXPOSURE_250,
+  SCALE_TEN | SENSITIVITY_HUNDRED | EXPOSURE_500,
+
+  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_125,
+
+  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_1000,
+  
+  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_250,
+  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_500,
+  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_1000,
+
+  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_125,
+  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_250,
+  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_500,
+  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_1000,
+ 
+  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_125,
+  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_250,
+  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_500,
+  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_1000,
+};
+
 static const uint8_t HEX_DIGITS[] PROGMEM = 
     {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
@@ -161,7 +214,7 @@ static uint32_t lowest_count = 0xFFFFFFFF;
 static uint32_t highest_count = 0;
 static uint16_t exposure_time_micros = 2000;
 static uint8_t counter_configuration = 0x3; // Max sensitivity.
-static uint8_t number_of_counters = 8; // [0 .. 16]
+static uint8_t number_of_counters = 16; // [0 .. 16]
 
 static uint8_t newest_time_index = 7;
 static volatile uint8_t index_of_time_to_send = 0;
@@ -184,6 +237,7 @@ void setup() {
   Serial.println("Starting.");
   Serial3.begin(GPS_DEFAULT_BAUD);
   while(!Serial3) {}
+  Serial.println("Serial port 3 initialized");
   Wire.begin();
   Serial.println("");
   Serial.println("I2C initialized.");
@@ -247,6 +301,7 @@ void setup() {
   digitalWrite(OUT_READ_START_SIGNAL, LOW);
 
   digitalWrite(OUT_GPS_ENABLE, HIGH);
+
   attachInterrupt(digitalPinToInterrupt(IN_GPS_SECOND_START_SIGNAL), 
       record_second_turnover, RISING);
 
@@ -260,10 +315,11 @@ void setup() {
 void loop() {
   lowest_count = 0xFFFFFFFF;
   highest_count = 0;
-  if (digitalRead(IN_PANIC_BUTTON_NOT) == LOW) {
-    halt_and_catch_fire();
-    // There is no return. The only way to restart is to reset.
-  }
+//  if (digitalRead(IN_PANIC_BUTTON_NOT) == LOW) {
+//    Serial.println("Panic button pushed!");
+//    halt_and_catch_fire();
+//    // There is no return. The only way to restart is to reset.
+//  }
 
   // Process pending GPS input
   while(Serial3.available()) {
@@ -284,6 +340,7 @@ void process_new_time() {
   if (gps.date.isValid() && gps.time.isValid()) {
     noInterrupts();
     uint32_t current_base_millis = second_base_in_millis;
+    uint8_t current_second_turnover = second_turnover;
     interrupts();
     uint8_t index_of_time_to_set = newest_time_index;
     index_of_time_to_set = (++index_of_time_to_set) & 0x7;
@@ -293,6 +350,8 @@ void process_new_time() {
     if (digitalRead(IN_DEBUG_1) == LOW) {
       Serial.print('[');
       Serial.print(index_of_time_to_set);
+      print_dash();
+      Serial.print(current_second_turnover, DEC);
       Serial.print(']');
       Serial.print(timestamps[index_of_time_to_set].get_year(), DEC);
       print_dash();
@@ -558,6 +617,200 @@ void flash_indicator(uint8_t code) {
 void rising_pulse(uint8_t pin) {
   digitalWrite(pin, HIGH);
   digitalWrite(pin, LOW);
+}
+
+/**
+ * Configures the sensors and optionally selects a counter. The command broadcast
+ * on the command bus. In addition, one counter may be selected. If the counter is
+ * larger than the number present, no counter is selected. This can be used to
+ * send commands that are not counter-specific. See broadcast_command.
+ * 
+ * Paramters:
+ *
+ * Name         Type            Contents
+ * ---------    ---------       ----------------------------------
+ * command      uint8_t         Command byte to be broadcast on the command bus 
+ * counter      uint8_t         Sensor to select, effiective if in the range 
+ *                              [0, sensor count - 1]
+ */
+void set_configuration(uint8_t command, uint8_t counter) {
+  uint8_t data[3];
+  // TODO(emintz): implementation
+}
+
+/**
+ * Configurs the sensors  WITHOUT selecting a particuler counter.
+ * Selectable counter pins, i.e. pins connected to the counter's partner 
+ * SN74HC125 driver, will retain their current signal levels.
+ * 
+ * Preconditions: SPI must be inactive, i.e. no SPI Transactions open. The
+ *                shift register's data register clock pin must be LOW.
+ *
+ * Postconditions: Command synthesized and shifted into the Serial In/Parallal Out
+ *                 register string.  All Counter Enable Bits will be 0.
+ *                
+ * Paramters:
+ *
+ * Name         Type            Contents
+ * ---------    ---------       ----------------------------------
+ * command      uint8_t         Command to be broadcast
+ *
+ * Note: counters are selected by toggeling their select line LOW.
+ */
+void set_configuration(uint8_t command) {
+  // TODO(emintz): implementation
+}
+
+
+// Write SD card records
+
+/*
+ * Writes the hardware configuration record. The record contains the
+ * following information. Note that all information is encoded in
+ * hexadecimal, per standards. Also write the current time.
+ */
+void write_hardware_serial_number() {
+  write_byte(RECORD_HARDWARE_CONFIGURATION);
+  write_eeprom(EEPROM_HW_MAJOR_VERSION);
+  write_eeprom(EEPROM_HW_MINOR_VERSION);
+  write_eeprom(EEPROM_HW_CHANGE_NUMBER);
+  write_eeprom(EEPROM_HW_RESERVED);
+  write_eeprom(EEPROM_HW_SERIAL_MSB);
+  write_eeprom(EEPROM_HW_SERIAL_LSB);
+  write_eeprom(EEPROM_NUMBER_OF_SENSORS);
+
+  write_elapsed_time();
+  write_current_time_field();
+  write_record_end();
+}
+
+void write_elapsed_time() {
+  write_uint32(micros());
+}
+
+/*
+ * Reads all counters and writes their valus to the SD card.
+ * 
+ * Preconditions:
+ *   Light observations must be available in the 
+ */
+void write_light_values(const  uint32_t * values, uint8_t sensor_count) {
+  for (uint8_t sensor_number = 0; sensor_number < sensor_count; ++sensor_number) {
+    uint32_t count = values[sensor_number];
+    write_uint32(count);
+  }
+}
+
+// Write field values
+
+/**
+ * Fetch the current time in seconds since January 1, 2000, UTC, convert it
+ * to Hex, and write the resulting 8 characters to disk.
+ */
+void write_current_time_field() {
+    // TODO(emintz): implement
+}
+
+// File management (SD Card)
+
+void wait_for_sdcard_bus_surrender() {
+  digitalWrite(OUT_SDCARD_SELECT_NOT, HIGH);
+  delayMicroseconds(SD_CARD_SPI_SURRENDER_MICROSECONDS);
+}
+
+/*
+ * Writes a new-line character to the file.
+ */
+void write_newline() {
+  file.write('\n');
+}
+
+/*
+ * Ends a record by writing a new-line character and flushing the buffer
+ * to the SD card, and deactivating the SD card.
+ */
+void write_record_end() {
+  write_newline();
+  file.flush();
+  wait_for_sdcard_bus_surrender();
+}
+
+/*
+ * Encodes one byte of data as in hexadecimal and writes the resulting
+ * two digits to the disk file
+ *
+ * Name        Type            Contents
+ * ---------   ---------       ----------------------------------
+ * value       byte            The value to write.
+ */
+void write_byte(uint8_t value) {
+  file.write(pgm_read_byte(HEX_DIGITS + ((value >> 4) & 0xF)));
+  file.write(pgm_read_byte(HEX_DIGITS + (value & 0xF)));
+}
+
+/**
+ * Writes a 16-bit unsigned integer value to the disk file. The value is
+ * written as 4 hex digits.
+ *
+ * Name        Type            Contents
+ * ---------   ---------       ----------------------------------
+ * value       uint16_t        The value to write.
+ */
+void write_uint16(uint16_t value) {
+  write_byte(highByte(value));
+  write_byte(lowByte(value)); 
+}
+
+/*
+ * Writes the unsigned 32-bit value to the SD card
+ * 
+ * Preconditions: The write count must have been initialized and at least one byte
+ *                must be free in the output queue. Neither is checked.
+ *
+ * Postconditions: the first remaining queue entry is set to the specified value and
+ *                 is removed from the free space pool.
+ * Paramters:
+ *
+ * Name         Type            Contents
+ * ---------    ---------       ----------------------------------
+ * value        uint32_t        The byte value to enqueue for output to the SD card
+ */
+void write_uint32(uint32_t value) {
+  uint8_t bytes[4];
+  uint8_t *pbytes = bytes + 4;
+  while(pbytes > bytes) {
+    *(--pbytes) = value & 0xFF;
+    value >>= 8;
+  }
+
+  while (pbytes < bytes + 4) {
+    write_byte(*pbytes++);
+  }
+}
+
+/*
+ * Extract one byte from EEPROM and write it to disk.
+ * 
+ * Name        Type            Contents
+ * ---------   ---------       ----------------------------------
+ * address     uint16_t        The EEPROM address containing the byte to be 
+ *                             written.
+ */
+void write_eeprom(uint16_t address) {
+  write_byte(EEPROM.read(address));
+}
+
+/*
+ * Writes one data byte from PROGMEM to disk. Note that all bytes are encoded in
+ * hexadecimal.
+ *
+ * Name        Type            Contents
+ * ---------   ---------       ----------------------------------
+ * address     address_short   The flash address containing the byte to be
+ *                             written.
+ */
+void write_pgm_mem(const uint8_t PROGMEM * address) {
+  write_byte(pgm_read_byte(address));  
 }
 
 // Interrupt routines

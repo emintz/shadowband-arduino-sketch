@@ -1,10 +1,34 @@
- // Settings for the Eclipse Shadow Band Detector
+// Settings for the Eclipse Shadow Band Detector
 // TODO(emintz); Reconcile with physical wiring!
+
 #ifndef __SETTINGS_H__
 #define __SETTINGS_H__
 
 #define BAUD 115200
 #define GPS_DEFAULT_BAUD 9600
+
+// TSL230XX sensitivity attentuations
+#define SENSITIVITY_POWER_DOWN 0x0
+#define SENSITIVITY_UNITY      0x1
+#define SENSITIVITY_TEN        0x2
+#define SENSITIVITY_HUNDRED    0x3
+
+// TSL230XX frequency precaling
+#define SCALE_UNITY            0x0
+#define SCALE_TWO              0x4
+#define SCALE_TEN              0x8
+#define SCALE_HUNDRED          0xC
+
+// Exposure times in microseconds
+#define EXPOSURE_125   0x00
+#define EXPOSURE_250   0x10
+#define EXPOSURE_500   0x20
+#define EXPOSURE_1000  0x30
+
+// Light measurement range. The system will try to keep the measurement between these two values;
+
+#define MEASUREMENT_UPPER_LIMIT 0xFFFFFFF
+#define MEASUREMENT_LOWER_LIMIT 0xFFFF
 
 // EEProm configuration
 #define EEPROM_HW_MAJOR_VERSION       0
@@ -54,6 +78,8 @@
 #define OUT_SPI_CLOCK 52
 #define OUT_SPI_MASTER_OUT_SLAVE_IN 51
 #define IN_SPI_MASTER_IN_SLAVE_OUT 50
+
+#define SD_CARD_SPI_SURRENDER_MICROSECONDS 10
 
 // Status indications
 #define STATUS_OK        3
