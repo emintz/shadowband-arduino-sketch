@@ -8,7 +8,7 @@
  *    A Output: Counter read-out control: pair enablement
  *              and byte output selection
  *    C Input: read register value byte
- *    L Output: sensor and counter clear, enable, and latchl
+ *    L Output: sensor configuration and counter clear, enable, and latch
  * 
  * All other registers are used pinwise
  * 
@@ -100,7 +100,7 @@
  * 
  * Data Record format. Note that byte numbers are in decimal.
  * 
- *     Bytes Contents
+ *     Bytes Contents TODO(emintz): not accurate. Fix
  *   ------- ----------------------------------------------------------
  *     00-01 Record type. 01, always 
  *     02-03 Number of counters (will be 0x10 in production systems)
@@ -145,53 +145,56 @@ const uint16_t EXPOSURE_TIME_MICROSECONDS[] PROGMEM = {125, 250, 500, 1000};
 
 /*
  * Sensor and exposure time configurations, ordered from least sensentive to most
- * sensitive. The bit layout follows:
+ * sensitive. The bit layout follows, where 0 denotes LSB:
  * 
- * Symbol  Meaning
- * ------  ----------
- *   X     Unused
- *   T     Exposure time
- *   S     Sensitivity Adjustment 
- *   F     Scale Factor
- *   
- * Bit:  7654 3210
- * ----  ---- ----
- *       XXTT FFCC  
+ * Bit(s)   Contents
+ * ------   -----------------------------------------------------
+ * 0-3      Sensor configuration, where 0 == S0, 1 = S1, 2 = S2, 3 = S3
+ * 4-7      Exposure index in EXPOSURE_TIME_MICROSECONDS above
+ * 
+ * Relative sensitivity is given in the comments, units are sensor-sensitivity-seconds,
+ * The numbers merely indicate relative nominal exposure, and are not guaranteed to be
+ * linear. Note that constants of the form nnEmm, where nn and mm are decimal digits, 
+ * indicate nn x 10^mm, per FORTRAN and (I think) Java specifications.
  */
 
 const uint8_t SENSOR_CONFIGURATIONS[] PROGMEM = {
-  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_125,
-  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_250,
-  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_500,
-  SCALE_HUNDRED | SENSITIVITY_HUNDRED | EXPOSURE_1000,
+  SENSOR_DIVIDE_BY_ONE_HUNDRED | EXPOSURE_125,    // 1E-2 * 1.25E-4 = 1.25E-6
+  SENSOR_DIVIDE_BY_ONE_HUNDRED | EXPOSURE_250,    // 1E-2 * 2.5E-4  = 2.5E-6
+  SENSOR_DIVIDE_BY_ONE_HUNDRED | EXPOSURE_500,    // 1E-2 * 5E-4    = 5E-6
+  SENSOR_DIVIDE_BY_ONE_HUNDRED | EXPOSURE_1000,   // 1E-2 * 1E-3    = 1E-5
   
-  SCALE_TEN | SENSITIVITY_HUNDRED | EXPOSURE_125,
-  SCALE_TEN | SENSITIVITY_HUNDRED | EXPOSURE_250,
-  SCALE_TEN | SENSITIVITY_HUNDRED | EXPOSURE_500,
+  SENSOR_DIVIDE_BY_TEN         | EXPOSURE_125,    // 1E-1 * 1.25E-4 = 1.25E-5
+  SENSOR_DIVIDE_BY_TEN         | EXPOSURE_250,    // 1E-1 * 2.5E-4  = 2.5E-5
+  SENSOR_DIVIDE_BY_TEN         | EXPOSURE_500,    // 1E-1 * 5E-4    = 5E-5
 
-  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_125,
+  SENSOR_DIVIDE_BY_TWO         | EXPOSURE_125,    // 5E-1 * 1.25E-4 = 6.25E-5
 
-  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_1000,
+  SENSOR_DIVIDE_BY_TEN         | EXPOSURE_1000,   // 1E-1 * 1E-3    = 1E-4
   
-  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_250,
-  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_500,
-  SCALE_TWO | SENSITIVITY_HUNDRED | EXPOSURE_1000,
-
-  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_125,
-  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_250,
-  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_500,
-  SCALE_UNITY | SENSITIVITY_TEN | EXPOSURE_1000,
+  SENSOR_TIMES_ONE             | EXPOSURE_125,    // 1E0  * 1.25E-4 = 1.25E-4   
+  SENSOR_TIMES_ONE             | EXPOSURE_250,    // 1E0  * 2.5E-4  = 2.5E-4
+  SENSOR_TIMES_ONE             | EXPOSURE_500,    // 1E0  * 5E-4    = 5E-4
+  SENSOR_TIMES_ONE             | EXPOSURE_1000,   // 1E0  * 1E-3    = 1E-3
  
-  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_125,
-  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_250,
-  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_500,
-  SCALE_UNITY | SENSITIVITY_UNITY | EXPOSURE_1000,
+  SENSOR_TIMES_TEN             | EXPOSURE_125,    // 1E1  * 1.25E-4 = 1,25E-3
+  SENSOR_TIMES_TEN             | EXPOSURE_250,    // 1E1  * 2.5E-4  = 2.5E-3
+  SENSOR_TIMES_TEN             | EXPOSURE_500,    // 1E1  * 5E-4    = 5E-3
+  SENSOR_TIMES_TEN             | EXPOSURE_1000,   // 1E1  * 1E-3    = 1E-2
+
+  SENSOR_TIMES_ONE_HUNDRED     | EXPOSURE_125,    // 1E2  * 1.25E-4 = 1,25E-2
+  SENSOR_TIMES_ONE_HUNDRED     | EXPOSURE_250,    // 1E2  * 2.5E-4  = 2.5E-2
+  SENSOR_TIMES_ONE_HUNDRED     | EXPOSURE_500,    // 1E2  * 5E-4    = 5E-2
+  SENSOR_TIMES_ONE_HUNDRED     | EXPOSURE_1000,   // 1E2  * 1E-3    = 1E-1  
 };
+
+#define SENSOR_CONFIGURATION_COUNT ((sizeof(SENSOR_CONFIGURATIONS))/(sizeof(SENSOR_CONFIGURATIONS[0])))
+#define MAX_SENSOR_CONFIGURATION_INDEX (SENSOR_CONFIGURATION_COUNT - 1)
 
 static const uint8_t HEX_DIGITS[] PROGMEM = 
     {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
-static const uint8_t SOFTWARE_SERIAL_NUMBER[] PROGMEM = {0, 3, 0, 0};
+static const uint8_t SOFTWARE_SERIAL_NUMBER[] PROGMEM = {0, 4, 0, 0};
 
 
 static char formatted_date_buffer[32];
@@ -202,21 +205,22 @@ static char formatted_date_buffer[32];
 #define TIME_STATE_SENDING 3
 
 static volatile uint32_t second_base_in_millis = 0;
-static uint32_t exposure_time_base_in_millis = 0;
-static long secs_since_y2k = 0;
 
 static TinyGPSPlus gps;
 
 static eclipse_time timestamps[8];
 
-// TODO(emintz): autorange exposure and sensitivity
+static uint32_t counter_values[16];
 static uint32_t lowest_count = 0xFFFFFFFF;
 static uint32_t highest_count = 0;
-static uint16_t exposure_time_micros = 2000;
-static uint8_t counter_configuration = 0x3; // Max sensitivity.
-static uint8_t number_of_counters = 16; // [0 .. 16]
+static uint16_t exposure_time_micros = 0;
 
-static uint8_t newest_time_index = 7;
+static uint8_t number_of_counters = 16; // [0 .. 16]
+static uint8_t configuration_index = 0;
+static uint8_t enable_debug_output = 0; // Nonzero send counter data --> console. 
+static uint8_t sensor_sensitivity_setting = 0;  // Sensor pin settings. See PORTL.
+
+static volatile uint8_t newest_time_index = 7;
 static volatile uint8_t index_of_time_to_send = 0;
 static volatile uint8_t time_state = TIME_STATE_READY;
 static volatile uint8_t send_index = 0;
@@ -230,11 +234,27 @@ void setup() {
   pinMode(OUT_INDICATOR_LED, OUTPUT);
   digitalWrite(OUT_INDICATOR_LED, LOW);
   digitalWrite(OUT_RCLK, LOW);
+  // Signal startup. 
   flash_indicator(STATUS_POWER_ON);
 
   Serial.begin(BAUD);
   while(!Serial) {}
-  Serial.println("Starting.");
+  Serial.print("Starting. Sensor configuration count is: ");
+  Serial.print(SENSOR_CONFIGURATION_COUNT, DEC);
+  Serial.println(", configurations:");
+  for (int i = 0; i < SENSOR_CONFIGURATION_COUNT; ++i) {
+    Serial.print('[');
+    Serial.print(i);
+    Serial.print("]: ");
+    uint8_t val = pgm_read_byte_near(SENSOR_CONFIGURATIONS + i);
+    uint8_t hi = (val >> 4) & 0x0F;
+    uint8_t lo = val & 0x0F;
+    Serial.print(hi, HEX);
+    Serial.print(lo, HEX);
+    Serial.print('(');
+    Serial.print(val, HEX);
+    Serial.print(") ");
+  }
   Serial3.begin(GPS_DEFAULT_BAUD);
   while(!Serial3) {}
   Serial.println("Serial port 3 initialized");
@@ -245,12 +265,32 @@ void setup() {
   SPI.begin();
   Serial.println("SPI initialized.");
 
+  if (!sd_card.begin(OUT_SDCARD_SELECT_NOT, 2)) {
+    Serial.println("SD Card begin fail");
+    panic_loop(PANIC_SD_CARD_SELECT_FAILED);
+  }
+
+  if (!sd_card.card()) {
+    panic_loop(PANIC_SD_CARD_DRIVER_AWOL);
+  }
+
+  if (!sd_card.chdir("/")) {
+    panic_loop(PANIC_SD_CARD_ROOT_AWOL);
+  }
+
+  file = sd_card.open("solar.txt", FILE_WRITE);
+  if (!file) {
+    Serial.println("SD Card solar.txt fail");
+    panic_loop(PANIC_SD_CARD_DATA_FILE_AWOL);
+  }
+  file.flush();
+
   // We use port L to configure the sensor and select the
   // displayed counter byte. Configure it for output.
   DDRL = 0xFF;
   // Sensor and counter initialization. TODO(emintz): Start at minimum
   // sensitivity and autorange.
-  PORTL = SENSOR_TIMES_ONE_HUNDRED;
+  PORTL = SENSOR_DIVIDE_BY_ONE_HUNDRED;
 
   // Register A is used for counter selection. All bits are output
   DDRA = 0xFF;
@@ -265,7 +305,7 @@ void setup() {
   DDRF = 0xFF;
   DDRK = 0xFF;
 
-  pinMode(IN_GPS_SECOND_START_SIGNAL, INPUT_PULLUP);
+  pinMode(IN_GPS_SECOND_START_SIGNAL, INPUT);
   pinMode(OUT_SECOND_TURNOVER, OUTPUT);
   pinMode(OUT_RCLK, OUTPUT);
   pinMode(OUT_SENSOR_OUTPUT_ENABLE_NOT, OUTPUT);
@@ -302,6 +342,12 @@ void setup() {
 
   digitalWrite(OUT_GPS_ENABLE, HIGH);
 
+  if (digitalRead(IN_SD_CARD_INSERTED_NOT) == LOW) {
+    Serial.println("SD Card inserted. Recording is good to go!");
+  } else {
+    Serial.println("SD card is UNAVAILABLE!");
+  }
+
   attachInterrupt(digitalPinToInterrupt(IN_GPS_SECOND_START_SIGNAL), 
       record_second_turnover, RISING);
 
@@ -315,22 +361,24 @@ void setup() {
 void loop() {
   lowest_count = 0xFFFFFFFF;
   highest_count = 0;
-//  if (digitalRead(IN_PANIC_BUTTON_NOT) == LOW) {
-//    Serial.println("Panic button pushed!");
-//    halt_and_catch_fire();
-//    // There is no return. The only way to restart is to reset.
-//  }
+  check_for_console_debug();
+  // TODO(emintz): rig IN_ALT_PANIC_NOT
+  if (digitalRead(IN_ALT_PANIC_NOT) == LOW) {
+    Serial.println("Panic button pushed!");
+    halt_and_catch_fire();
+    // There is no return. The only way to restart is to reset.
+  }
 
   // Process pending GPS input
   while(Serial3.available()) {
+    digitalWrite(OUT_HAVE_GPS_SIGNAL, HIGH);
     if(gps.encode(Serial3.read()))
-      digitalWrite(OUT_HAVE_GPS_SIGNAL, HIGH);
       if (gps.time.isUpdated()) {
         process_new_time();
     }
   }
   digitalWrite(OUT_HAVE_GPS_SIGNAL, LOW);
-  take_exposure(1000000);
+  take_exposure();
   read_all_counters();
 }
 
@@ -347,28 +395,28 @@ void process_new_time() {
     timestamps[index_of_time_to_set].set(gps);
     timestamps[index_of_time_to_set].set_base_millis(current_base_millis);
     newest_time_index = index_of_time_to_set;
-    if (digitalRead(IN_DEBUG_1) == LOW) {
-      Serial.print('[');
-      Serial.print(index_of_time_to_set);
-      print_dash();
-      Serial.print(current_second_turnover, DEC);
-      Serial.print(']');
-      Serial.print(timestamps[index_of_time_to_set].get_year(), DEC);
-      print_dash();
-      print_two_digit_dec(timestamps[index_of_time_to_set].get_month());
-      print_dash();
-      print_two_digit_dec(timestamps[index_of_time_to_set].get_day());
-      Serial.print(' ');
-   
-      print_two_digit_dec(timestamps[index_of_time_to_set].get_hour());
-      print_time_sep();
-      print_two_digit_dec(timestamps[index_of_time_to_set].get_minute());
-      print_time_sep();
-      print_two_digit_dec(timestamps[index_of_time_to_set].get_second());
-      Serial.print("--|");
-      Serial.print(timestamps[index_of_time_to_set].get_base_millis());
-      Serial.println("");
-    }
+//    if (digitalRead(IN_DEBUG_1) == LOW) {
+//      Serial.print('[');
+//      Serial.print(index_of_time_to_set);
+//      print_dash();
+//      Serial.print(current_second_turnover, DEC);
+//      Serial.print(']');
+//      Serial.print(timestamps[index_of_time_to_set].get_year(), DEC);
+//      print_dash();
+//      print_two_digit_dec(timestamps[index_of_time_to_set].get_month());
+//      print_dash();
+//      print_two_digit_dec(timestamps[index_of_time_to_set].get_day());
+//      Serial.print(' ');
+//   
+//      print_two_digit_dec(timestamps[index_of_time_to_set].get_hour());
+//      print_time_sep();
+//      print_two_digit_dec(timestamps[index_of_time_to_set].get_minute());
+//      print_time_sep();
+//      print_two_digit_dec(timestamps[index_of_time_to_set].get_second());
+//      Serial.print("--|");
+//      Serial.print(timestamps[index_of_time_to_set].get_base_millis());
+//      Serial.println("");
+//    }
   }
 }
 
@@ -386,19 +434,33 @@ void print_two_digit_dec(uint8_t value) {
   }
   Serial.print(value, DEC);
 }
+// Debug management
+
+/**
+ * Sets enable_debug_management to TRUE if and only if the IN_DEBUG_2 pin is LOW.
+ */
+void check_for_console_debug() {
+  enable_debug_output = (digitalRead(IN_DEBUG_2) == LOW);
+}
 
 // Counter read methods
 
 void read_all_counters() {
-  uint32_t counter_values[16];
   for (uint8_t counter_no = 0; counter_no < number_of_counters; ++counter_no) {
     uint8_t pair_number = counter_no >> 1;  // Fast divide by two
     uint8_t offset = (counter_no & 1) << 2; // Fast mod 2 then * 4.
     select_counter_pair_for_output(pair_number);
-    counter_values[counter_no] = read_selected_counter_value(offset);
+    uint32_t the_counter_value = read_selected_counter_value(offset);
+    counter_values[counter_no] = the_counter_value;
+    if (the_counter_value < lowest_count) {
+      lowest_count = the_counter_value;
+    }
+    if (highest_count < the_counter_value) {
+      highest_count = the_counter_value;
+    }
   }
 
-  if (digitalRead(IN_DEBUG_2) == LOW) {
+  if (enable_debug_output) {
     for (uint8_t index = 0; index < number_of_counters; ++index) {
       Serial.print(" [");
       Serial.print(index);
@@ -496,30 +558,79 @@ void clear_all_counters() {
   PORTL = portl | COUNTER_CLEAR_NOT;
 }
 
-void configure_counters(uint8_t configuration_nybble) {
-  // TODO(emintz): validate configuration
+/**
+ * Configures and enables all light sensors. Note that the sensors are configured via port L.
+ * 
+ * Returns: the desired exposure time in microsesonds. The longest exposure time is 1000
+ * microseconds == 1/1000 second.
+ */
+uint16_t configure_and_enable_sensors() {
   uint8_t portl = PORTL;
-  PORTL = (portl & 0xF0) | (configuration_nybble & 0x0F);
+  uint8_t exposure_configuration = pgm_read_byte(SENSOR_CONFIGURATIONS + configuration_index);
+  uint8_t exposure_index = (exposure_configuration >> 4) & 0x0F;
+  if (enable_debug_output) {
+    Serial.print("Before configuration PORTL: ");
+    Serial.print(portl, HEX);
+    Serial.println(", config index: ");
+    Serial.print(configuration_index, DEC);
+    Serial.print(", exp config: ");
+    Serial.print(exposure_configuration, HEX);
+    Serial.print(", index: ");
+    Serial.print(exposure_index);
+  }
+  portl &= 0xF0;  // Clear the sensitivity bits
+  sensor_sensitivity_setting = exposure_configuration & 0x0F; 
+  portl |= (sensor_sensitivity_setting | SENSOR_OUTPUT_ENABLE);
+  uint16_t exposure_time = pgm_read_word_near(EXPOSURE_TIME_MICROSECONDS + exposure_index);
+  if (enable_debug_output) {
+    Serial.print(", exposure time: ");
+    Serial.print(exposure_time, DEC);
+    Serial.print(", PORTL: ");
+    Serial.println(portl, HEX);
+  }
+  PORTL = portl;
+  return exposure_time;
 }
 
-void enable_sensors() {
-  uint8_t portl = PORTL;
-  PORTL = portl | SENSOR_OUTPUT_ENABLE;
-}
-
+/**
+ * Disable all light sensors
+ */
 void disable_sensors() {
   uint8_t portl = PORTL;
   PORTL = portl & (~SENSOR_OUTPUT_ENABLE);
 }
 
-void take_exposure(uint16_t exposure_time_micros) {
+/**
+ * Takes an exposure, which requires the following steps:
+ * 
+ * 1.  Select the timestamp that will represent the exposure time. This is the
+ *     most recently set timestamp. Note that multiple timestamps may be set
+ *     during a single second.
+ * 2.  Send a sync pulse to signal exposure start to trigger a 'scope sweep, if needed.
+ * 3.  Clear all counters.
+ * 4.  Set the time base, the time at which the exposure started. 
+ * 5.  Configure and enable the light sensors. This starts the actual exposure. Note that
+ *     the configuration function returns the desired exposure time in microseconds.
+ * 6.  Wait for the exposure to complete.
+ * 7.  Disable the light sensors, which ends the expposure. No further pulses will be 
+ *     counted during this exposure cycle.
+ * 8,  Signal the exposure end, to trigger a 'scope sweep if needed.
+ * 9.  Command the counters to transfer the current count values to their output
+ *     buffers, whence they can be retrieved.
+ */
+void take_exposure() {
+  index_of_time_to_send = newest_time_index;
   signal_exposure_start();
   clear_all_counters();
-  enable_sensors();
+  timestamps[index_of_time_to_send].set_timestamp_millis(millis());
+  exposure_time_micros = configure_and_enable_sensors();
   delayMicroseconds(exposure_time_micros);
   disable_sensors();
   signal_exposure_end();
   store_current_counter_values();
+  read_all_counters();
+  write_data_record();
+  adjust_exposure_configuration();
 }
 
 void signal_read_start() {
@@ -555,6 +666,7 @@ void halt_and_catch_fire() {
  *                            1 second wait between signals.
  */
 void panic_loop(uint8_t code) {
+  Serial.flush();
   for(;;){
     flash_indicator(code);
     delay(1000);
@@ -619,49 +731,6 @@ void rising_pulse(uint8_t pin) {
   digitalWrite(pin, LOW);
 }
 
-/**
- * Configures the sensors and optionally selects a counter. The command broadcast
- * on the command bus. In addition, one counter may be selected. If the counter is
- * larger than the number present, no counter is selected. This can be used to
- * send commands that are not counter-specific. See broadcast_command.
- * 
- * Paramters:
- *
- * Name         Type            Contents
- * ---------    ---------       ----------------------------------
- * command      uint8_t         Command byte to be broadcast on the command bus 
- * counter      uint8_t         Sensor to select, effiective if in the range 
- *                              [0, sensor count - 1]
- */
-void set_configuration(uint8_t command, uint8_t counter) {
-  uint8_t data[3];
-  // TODO(emintz): implementation
-}
-
-/**
- * Configurs the sensors  WITHOUT selecting a particuler counter.
- * Selectable counter pins, i.e. pins connected to the counter's partner 
- * SN74HC125 driver, will retain their current signal levels.
- * 
- * Preconditions: SPI must be inactive, i.e. no SPI Transactions open. The
- *                shift register's data register clock pin must be LOW.
- *
- * Postconditions: Command synthesized and shifted into the Serial In/Parallal Out
- *                 register string.  All Counter Enable Bits will be 0.
- *                
- * Paramters:
- *
- * Name         Type            Contents
- * ---------    ---------       ----------------------------------
- * command      uint8_t         Command to be broadcast
- *
- * Note: counters are selected by toggeling their select line LOW.
- */
-void set_configuration(uint8_t command) {
-  // TODO(emintz): implementation
-}
-
-
 // Write SD card records
 
 /*
@@ -671,19 +740,87 @@ void set_configuration(uint8_t command) {
  */
 void write_hardware_serial_number() {
   write_byte(RECORD_HARDWARE_CONFIGURATION);
-  write_eeprom(EEPROM_HW_MAJOR_VERSION);
-  write_eeprom(EEPROM_HW_MINOR_VERSION);
-  write_eeprom(EEPROM_HW_CHANGE_NUMBER);
-  write_eeprom(EEPROM_HW_RESERVED);
-  write_eeprom(EEPROM_HW_SERIAL_MSB);
-  write_eeprom(EEPROM_HW_SERIAL_LSB);
-  write_eeprom(EEPROM_NUMBER_OF_SENSORS);
+  write_byte(CONFIG_HW_MAJOR_VERSION);
+  write_byte(CONFIG_HW_MINOR_VERSION);
+  write_byte(CONFIG_HW_CHANGE_NUMBER);
+  write_byte(CONFIG_HW_RESERVED);
+  write_byte(CONFIG_HW_SERIAL_MSB);
+  write_byte(CONFIG_HW_SERIAL_LSB);
+  write_byte(CONFIG_NUMBER_OF_SENSORS);
 
   write_elapsed_time();
   write_current_time_field();
   write_record_end();
 }
 
+/**
+ * Adjusts the configuration. This is the autoranging.
+ */
+void adjust_exposure_configuration() {
+  if (enable_debug_output) {
+    Serial.print("Configuration index: ");
+    Serial.print(configuration_index, DEC);
+    Serial.print(" lowest: ");
+    Serial.print(lowest_count, DEC);
+    Serial.print(", highest: ");
+    Serial.print(highest_count, DEC);
+  }
+  
+  if (MEASUREMENT_UPPER_LIMIT < highest_count) {
+    if (0 < configuration_index) {
+      -- configuration_index;
+    }
+  } else if (lowest_count < MEASUREMENT_DESIRED_LOWER_LIMIT) {
+    if (configuration_index < MAX_SENSOR_CONFIGURATION_INDEX) {
+      ++configuration_index;
+    }
+  }
+
+  if (enable_debug_output) {
+    Serial.print(", configuration index set to: ");
+    Serial.println(configuration_index, DEC);
+  }
+}
+
+/**
+ * Writes a data record.
+ */
+void write_data_record() {
+  write_data_record_type();
+  write_number_of_counters();
+  write_gps_time_index();
+  write_sensor_config();
+  write_elapsed_time();
+  write_current_time_field();
+  write_light_values(counter_values, number_of_counters);
+  write_record_end();
+}
+
+/**
+ * Writes the data record header. 
+ */
+void write_data_record_type() {
+  write_byte(1);
+}
+
+/**
+ * Write the number of counters
+ */
+void write_number_of_counters() {
+  write_byte(number_of_counters);
+}
+
+void write_gps_time_index() {
+  write_byte(index_of_time_to_send);
+}
+
+void write_sensor_config() {
+  write_byte(sensor_sensitivity_setting);
+}
+
+/**
+ * Writes the elapsed time since startup
+ */
 void write_elapsed_time() {
   write_uint32(micros());
 }
@@ -692,7 +829,7 @@ void write_elapsed_time() {
  * Reads all counters and writes their valus to the SD card.
  * 
  * Preconditions:
- *   Light observations must be available in the 
+ *   Light observations must be available in the values[]  array. 
  */
 void write_light_values(const  uint32_t * values, uint8_t sensor_count) {
   for (uint8_t sensor_number = 0; sensor_number < sensor_count; ++sensor_number) {
@@ -704,11 +841,18 @@ void write_light_values(const  uint32_t * values, uint8_t sensor_count) {
 // Write field values
 
 /**
- * Fetch the current time in seconds since January 1, 2000, UTC, convert it
- * to Hex, and write the resulting 8 characters to disk.
+ * Write the exposure start time.
  */
 void write_current_time_field() {
-    // TODO(emintz): implement
+  eclipse_time * ptime = timestamps + index_of_time_to_send;
+  write_uint16(ptime->get_year());
+  write_byte(ptime->get_month());
+  write_byte(ptime->get_day());
+  write_byte(ptime->get_hour());
+  write_byte(ptime->get_minute());
+  write_byte(ptime->get_second());
+  write_uint32(ptime->get_base_millis());
+  write_uint32(ptime->get_timestamp_millis());
 }
 
 // File management (SD Card)
@@ -722,17 +866,36 @@ void wait_for_sdcard_bus_surrender() {
  * Writes a new-line character to the file.
  */
 void write_newline() {
-  file.write('\n');
+  output_raw_byte('\n');
 }
 
 /*
  * Ends a record by writing a new-line character and flushing the buffer
- * to the SD card, and deactivating the SD card.
+ * to the output, and, if the output is going to the SD card, flushing the
+ * output buffer.
  */
 void write_record_end() {
-  write_newline();
-  file.flush();
-  wait_for_sdcard_bus_surrender();
+  if (!enable_debug_output) {
+    write_newline();
+    file.flush();
+    wait_for_sdcard_bus_surrender();
+  } else {
+    Serial.println("<<<");
+    Serial.flush();
+  }
+}
+
+/**
+ * Outputs one raw byte to the desired destination. If enable_output_debug is TRUE
+ * (i.e. non-zero), the byte gets written to Serial (the terminal). Otherwise, it
+ * gets written to the SD card.
+ */
+void output_raw_byte(uint8_t value) {
+  if (enable_debug_output) {
+    Serial.write(value);
+  } else {
+    file.write(value);
+  }
 }
 
 /*
@@ -744,8 +907,8 @@ void write_record_end() {
  * value       byte            The value to write.
  */
 void write_byte(uint8_t value) {
-  file.write(pgm_read_byte(HEX_DIGITS + ((value >> 4) & 0xF)));
-  file.write(pgm_read_byte(HEX_DIGITS + (value & 0xF)));
+  output_raw_byte(pgm_read_byte(HEX_DIGITS + ((value >> 4) & 0xF)));
+  output_raw_byte(pgm_read_byte(HEX_DIGITS + (value & 0xF)));
 }
 
 /**
@@ -786,18 +949,6 @@ void write_uint32(uint32_t value) {
   while (pbytes < bytes + 4) {
     write_byte(*pbytes++);
   }
-}
-
-/*
- * Extract one byte from EEPROM and write it to disk.
- * 
- * Name        Type            Contents
- * ---------   ---------       ----------------------------------
- * address     uint16_t        The EEPROM address containing the byte to be 
- *                             written.
- */
-void write_eeprom(uint16_t address) {
-  write_byte(EEPROM.read(address));
 }
 
 /*

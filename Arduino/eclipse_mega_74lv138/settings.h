@@ -7,28 +7,10 @@
 #define BAUD 115200
 #define GPS_DEFAULT_BAUD 9600
 
-// TSL230XX sensitivity attentuations
-#define SENSITIVITY_POWER_DOWN 0x0
-#define SENSITIVITY_UNITY      0x1
-#define SENSITIVITY_TEN        0x2
-#define SENSITIVITY_HUNDRED    0x3
-
-// TSL230XX frequency precaling
-#define SCALE_UNITY            0x0
-#define SCALE_TWO              0x4
-#define SCALE_TEN              0x8
-#define SCALE_HUNDRED          0xC
-
-// Exposure times in microseconds
-#define EXPOSURE_125   0x00
-#define EXPOSURE_250   0x10
-#define EXPOSURE_500   0x20
-#define EXPOSURE_1000  0x30
-
 // Light measurement range. The system will try to keep the measurement between these two values;
 
 #define MEASUREMENT_UPPER_LIMIT 0xFFFFFFF
-#define MEASUREMENT_LOWER_LIMIT 0xFFFF
+#define MEASUREMENT_DESIRED_LOWER_LIMIT 0xFFFF
 
 // EEProm configuration
 #define EEPROM_HW_MAJOR_VERSION       0
@@ -38,6 +20,15 @@
 #define EEPROM_HW_SERIAL_LSB          4
 #define EEPROM_HW_SERIAL_MSB          5
 #define EEPROM_NUMBER_OF_SENSORS      6
+
+// Configuration values
+#define CONFIG_HW_MAJOR_VERSION       1
+#define CONFIG_HW_MINOR_VERSION       0
+#define CONFIG_HW_CHANGE_NUMBER       2   // Cobble in GPS puck: 1, SD Card: 2, Alt Panic: 3
+#define CONFIG_HW_RESERVED            0
+#define CONFIG_HW_SERIAL_LSB          1
+#define CONFIG_HW_SERIAL_MSB          0
+#define CONFIG_NUMBER_OF_SENSORS     16
 
 // Status (i.e. indicator light flash) codes:
 #define STATUS_OK       3
@@ -59,11 +50,14 @@
 #define IN_SD_CARD_INSERTED_NOT 6  // use INPUT_PULLUP
 #define OUT_SECOND_TURNOVER 7
 #define OUT_INDICATOR_LED 8
-#define IN_PANIC_BUTTON_NOT 9
+#define IN_PANIC_BUTTON_NOT 9 // TODO(emintz): grounded. DO NOT USE!
 #define OUT_EXPOSURE_START_SIGNAL 10     // Connected and not used yet.
 #define OUT_EXPOSURE_END_SIGNAL 11  // Connected and not used yet.
 #define OUT_READ_START_SIGNAL 12  // Connected and not used yet. 
 #define OUT_HAVE_GPS_SIGNAL 13
+// 14: Reserved for GPS
+// 15: Reserved for GPS
+#define IN_ALT_PANIC_NOT 16  // TODO(emintz): wire alternate panic button.
 
 #define OUT_COUNTER_CLEAR_NOT 43
 #define OUT_RCLK 44
@@ -151,6 +145,24 @@
 #define SENSOR_OUTPUT_ENABLE         0b00010000
 #define COUNTER_LATCH_MEASUREMENT    0b00100000
 #define COUNTER_CLEAR_NOT            0b01000000
+
+// TSL230XX sensitivity attentuations
+#define SENSITIVITY_POWER_DOWN 0x0
+#define SENSITIVITY_UNITY      0x1
+#define SENSITIVITY_TEN        0x2
+#define SENSITIVITY_HUNDRED    0x3
+
+// TSL230XX frequency precaling
+#define SCALE_UNITY            0x0
+#define SCALE_TWO              0x4
+#define SCALE_TEN              0x8
+#define SCALE_HUNDRED          0xC
+
+// Exposure times in microseconds
+#define EXPOSURE_125   0x00
+#define EXPOSURE_250   0x10
+#define EXPOSURE_500   0x20
+#define EXPOSURE_1000  0x30
 
 // NO-OP instruction, which can be used to create short delays.
 #define NO_OP __asm__ __volatile__ ("nop\n\t");
